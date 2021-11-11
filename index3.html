@@ -49,7 +49,7 @@
 			// const stats = new Stats();
 			// container.appendChild( stats.dom );
             let buildMaterial; 
-			const renderer = new THREE.WebGLRenderer( { antialias: true, logarithmicDepthBuffer:true } );
+			const renderer = new THREE.WebGLRenderer( { antialias: true,     rendererExtensionFragDepth: true, logarithmicDepthBuffer: true, } );
 			renderer.setPixelRatio( window.devicePixelRatio );
 			renderer.setSize( window.innerWidth, window.innerHeight );
 			renderer.outputEncoding = THREE.sRGBEncoding;
