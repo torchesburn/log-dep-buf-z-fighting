@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - animation - keyframes</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+		<style>
+			body {
+				background-color: #bfe3dd;
+				color: #000;
+			}
+
+			a {
+				color: #2983ff;
+			}
+		</style>
+	</head>
+
+	<body>
+
+		<div id="container"></div>
+
+		<div id="info">
+			<a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> webgl - animation - keyframes<br/>
+			Model: <a href="https://www.artstation.com/artwork/1AGwX" target="_blank" rel="noopener">Littlest Tokyo</a> by
+			<a href="https://www.artstation.com/glenatron" target="_blank" rel="noopener">Glen Fox</a>, CC Attribution.
+		</div>
+
+		<script type="module">
+
+            const root = "./three/133.1/build/";
+            const latestRoot = "./three/134/build/";
+            const chosenBuild = latestRoot;
+
+            import * as THREE from './three/134/build/three.module.js';
+
+            import { OrbitControls } from './three/134/examples/jsm/controls/OrbitControls.js';
+            import { RoomEnvironment } from './three/134/examples/jsm/environments/RoomEnvironment.js';
+
+            import { GLTFLoader } from './three/134/examples/jsm/loaders/GLTFLoader.js';
+            import { DRACOLoader } from './three/134/examples/jsm/loaders/DRACOLoader.js';
+
+			let mixer;
+
+			const clock = new THREE.Clock();
+			const container = document.getElementById( 'container' );
+
+			// const stats = new Stats();
+			// container.appendChild( stats.dom );
+            let buildMaterial; 
+			const renderer = new THREE.WebGLRenderer( { antialias: true } );
+			renderer.setPixelRatio( window.devicePixelRatio );
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.outputEncoding = THREE.sRGBEncoding;
+			container.appendChild( renderer.domElement );
+
+			const pmremGenerator = new THREE.PMREMGenerator( renderer );
+
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color( 0xbfe3dd );
+			scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), 0.04 ).texture;
+
+			const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 100 );
+			camera.position.set( 5, 2, 8 );
+
+			const controls = new OrbitControls( camera, renderer.domElement );
+			controls.target.set( 0, 0.5, 0 );
+			controls.update();
+			controls.enablePan = true;
+			controls.enableDamping = true;
+
+			const dracoLoader = new DRACOLoader();
+			dracoLoader.setDecoderPath( 'draco/gltf/' );
+
+			const loader = new GLTFLoader();
+			loader.setDRACOLoader( dracoLoader );
+			loader.load( 'models/gltf/homespace.glb',  ( gltf )=> {
+                buildMaterial = new THREE.ShaderMaterial({
+                uniforms: {
+                    uColor: {
+                    type: 'c',
+                    value: new THREE.Color(0x64b5f6),
+                    needsUpdate: true,
+                    },
+                    uTime: {
+                    type: 'f',
+                    value: 0,
+                    needsUpdate: true,
+                    },
+                },
+                vertexShader: `
+                    ${THREE.ShaderChunk.common}
+                    precision highp float;
+                    precision highp int;
+
+                    uniform vec4 uSelectRange;
+
+                    // attribute vec3 barycentric;
+                    attribute float ao;
+                    attribute float skyLight;
+                    attribute float torchLight;
+
+                    varying vec3 vViewPosition;
+                    varying vec2 vUv;
+                    varying vec3 vBarycentric;
+                    varying float vAo;
+                    varying float vSkyLight;
+                    varying float vTorchLight;
+                    varying vec3 vSelectColor;
+                    varying vec2 vWorldUv;
+                    varying vec3 vPos;
+                    varying vec3 vNormal;
+
+                    ${THREE.ShaderChunk.logdepthbuf_pars_vertex}
+
+                    void main() {
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    gl_Position = projectionMatrix * mvPosition;
+
+                    vViewPosition = -mvPosition.xyz;
+                    vUv = uv;
+                    // vBarycentric = barycentric;
+                    float vid = float(gl_VertexID);
+                    if (mod(vid, 3.) < 0.5) {
+                        vBarycentric = vec3(1., 0., 0.);
+                    } else if (mod(vid, 3.) < 1.5) {
+                        vBarycentric = vec3(0., 1., 0.);
+                    } else {
+                        vBarycentric = vec3(0., 0., 1.);
+                    }
+                    vAo = ao/27.0;
+                    vSkyLight = skyLight/8.0;
+                    vTorchLight = torchLight/8.0;
+
+                    vSelectColor = vec3(0.);
+                    if (
+                        position.x >= uSelectRange.x &&
+                        position.z >= uSelectRange.y &&
+                        position.x < uSelectRange.z &&
+                        position.z < uSelectRange.w
+                    ) {
+                        vSelectColor = vec3(${new THREE.Color(0x4fc3f7).toArray().join(', ')});
+                    }
+
+                    vec3 vert_tang;
+                    vec3 vert_bitang;
+                    if (abs(normal.y) < 0.05) {
+                        if (abs(normal.x) > 0.95) {
+                        vert_bitang = vec3(0., 1., 0.);
+                        vert_tang = normalize(cross(vert_bitang, normal));
+                        vWorldUv = vec2(dot(position, vert_tang), dot(position, vert_bitang));
+                        } else {
+                        vert_bitang = vec3(0., 1., 0.);
+                        vert_tang = normalize(cross(vert_bitang, normal));
+                        vWorldUv = vec2(dot(position, vert_tang), dot(position, vert_bitang));
+                        }
+                    } else {
+                        vert_tang = vec3(1., 0., 0.);
+                        vert_bitang = normalize(cross(vert_tang, normal));
+                        vWorldUv = vec2(dot(position, vert_tang), dot(position, vert_bitang));
+                    }
+                    vWorldUv /= 4.0;
+                    vec3 vert_norm = normal;
+
+                    vec3 t = normalize(normalMatrix * vert_tang);
+                    vec3 b = normalize(normalMatrix * vert_bitang);
+                    vec3 n = normalize(normalMatrix * vert_norm);
+                    mat3 tbn = transpose(mat3(t, b, n));
+
+                    vPos = position;
+                    vNormal = normal;
+
+                
+
+                    ${THREE.ShaderChunk.logdepthbuf_vertex}
+                    }
+                `,
+                fragmentShader: `
+                    precision highp float;
+                    precision highp int;
+
+                    #define PI 3.1415926535897932384626433832795
+
+                    uniform float sunIntensity;
+                    uniform sampler2D tex;
+                    uniform vec3 uColor;
+                    uniform float uTime;
+                    uniform vec3 sunDirection;
+                    float parallaxScale = 0.3;
+                    float parallaxMinLayers = 50.;
+                    float parallaxMaxLayers = 50.;
+
+                    varying vec3 vViewPosition;
+                    varying vec2 vUv;
+                    varying vec3 vBarycentric;
+                    varying float vAo;
+                    varying float vSkyLight;
+                    varying float vTorchLight;
+                    varying vec3 vSelectColor;
+                    varying vec2 vWorldUv;
+                    varying vec3 vPos;
+                    varying vec3 vNormal;
+
+                    ${THREE.ShaderChunk.logdepthbuf_pars_fragment}
+
+                    float edgeFactor(vec2 uv) {
+                    float divisor = 0.5;
+                    float power = 0.5;
+                    return min(
+                        pow(abs(uv.x - round(uv.x/divisor)*divisor), power),
+                        pow(abs(uv.y - round(uv.y/divisor)*divisor), power)
+                    ) > 0.1 ? 0.0 : 1.0;
+                    /* return 1. - pow(abs(uv.x - round(uv.x/divisor)*divisor), power) *
+                        pow(abs(uv.y - round(uv.y/divisor)*divisor), power); */
+                    }
+
+                    vec3 getTriPlanarBlend(vec3 _wNorm){
+                    // in wNorm is the world-space normal of the fragment
+                    vec3 blending = abs( _wNorm );
+                    // blending = normalize(max(blending, 0.00001)); // Force weights to sum to 1.0
+                    // float b = (blending.x + blending.y + blending.z);
+                    // blending /= vec3(b, b, b);
+                    // return min(min(blending.x, blending.y), blending.z);
+                    blending = normalize(blending);
+                    return blending;
+                    }
+
+                    void main() {
+                    // vec3 diffuseColor1 = vec3(${new THREE.Color(0x1976d2).toArray().join(', ')});
+                    vec3 diffuseColor2 = uColor;
+                    float normalRepeat = 1.0;
+
+                    vec3 blending = getTriPlanarBlend(vNormal);
+                    float xaxis = edgeFactor(vPos.yz * normalRepeat);
+                    float yaxis = edgeFactor(vPos.xz * normalRepeat);
+                    float zaxis = edgeFactor(vPos.xy * normalRepeat);
+                    float f = xaxis * blending.x + yaxis * blending.y + zaxis * blending.z;
+
+                    // vec2 worldUv = vWorldUv;
+                    // worldUv = mod(worldUv, 1.0);
+                    // float f = edgeFactor();
+                    // float f = max(normalTex.x, normalTex.y, normalTex.z);
+
+                    if (abs(length(vViewPosition) - uTime * 20.) < 0.1) {
+                        f = 1.0;
+                    }
+
+                    float d = gl_FragCoord.z/gl_FragCoord.w;
+                    vec3 c = diffuseColor2; // mix(diffuseColor1, diffuseColor2, abs(vPos.y/10.));
+                    float f2 = 1. + d/10.0;
+                    gl_FragColor = vec4(c, 0.5 + max(f, 0.3) * f2 * 0.5);
+
+                    ${THREE.ShaderChunk.logdepthbuf_fragment}
+                    }
+                `,
+                transparent: true,
+                polygonOffset: true,
+                polygonOffsetFactor: -1,
+                });
+
+
+				const model = gltf.scene;
+              
+				model.position.set( 1, 1, 0 );
+				// model.scale.set( 0.01, 0.01, 0.01 );
+                const model2 = model.clone();
+				scene.add( model );
+                model.traverse(e=>{
+                    if(e.isMesh) {
+                        e.material = buildMaterial;
+                    }
+                });
+
+                scene.add(model2);
+
+				// mixer = new THREE.AnimationMixer( model );
+				// mixer.clipAction( gltf.animations[ 0 ] ).play();
+
+				animate();
+
+			}, undefined, function ( e ) {
+
+				console.error( e );
+
+			} );
+
+
+			window.onresize = function () {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			};
+
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				const delta = clock.getDelta();
+
+				// mixer.update( delta );
+
+				controls.update();
+                renderer.render( scene, camera )
+                if(buildMaterial) {
+                    buildMaterial.uniforms.uTime.value = (new Date().getMilliseconds%1500)/1500;
+                }
+			}
+		</script>
+
+	</body>
+
+</html>
