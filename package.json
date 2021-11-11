@@ -18,7 +18,6 @@
   "homepage": "https://github.com/yaserOSource/log-dep-buf-z-fighting#readme",
   "dependencies": {
     "connect": "^3.7.0",
-    "server-static": "^2.0.5",
-    "three": "^0.134.0"
+    "server-static": "^2.0.5"
   }
 }
